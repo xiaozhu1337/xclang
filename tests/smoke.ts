@@ -108,6 +108,24 @@ for (const file of programs) {
 run(tool("FileCheck"), [write("check.txt", "CHECK: hello\nCHECK-NEXT: world\n"),
   `--input-file=${write("input.txt", "hello\nworld\n")}`]);
 
+/// On macOS, clang's crash stack trace by the tree's llvm-symbolizer names
+/// no frame of llvm: llvm has no symbols, where the weak definitions it
+/// exported named each frame after the nearest one before it
+/// (scripts/toolchain.ts).
+if (process.platform === "darwin") {
+  const args = ["-fno-crash-diagnostics", "-c", write("crash.c", "#pragma clang __debug crash\n"), "-o", path.join(work, "crash.o")];
+  console.log(`+ ${tool("clang")} ${args.join(" ")}`);
+  const result = spawnSync(tool("clang"), args, { encoding: "utf8", cwd: work });
+  process.stderr.write(result.stderr ?? "");
+  const frames = (result.stderr ?? "").split(/\r?\n/).filter((line) => /^\s*#\d+ 0x[0-9a-f]+ .*\/bin\/llvm\+0x/i.test(line));
+  const named = frames.filter((line) => !/^\s*#\d+ 0x[0-9a-f]+ \(/i.test(line));
+  if (result.status === 0 || frames.length < 10 || named.length) {
+    failures.push(`clang's crash stack trace: ${frames.length} frames of llvm, ${named.length} named`);
+  }
+  const symbols = run(tool("llvm-nm"), ["--defined-only", tool("llvm")]);
+  if (symbols === undefined || symbols.trim()) failures.push(`llvm has symbols: ${(symbols ?? "").split("\n").slice(0, 5).join(", ")}`);
+}
+
 /// 2. Every target this machine can build for.
 const targets = [
   "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-w64-mingw32", "aarch64-w64-mingw32",
