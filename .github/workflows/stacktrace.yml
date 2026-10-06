@@ -15,14 +15,14 @@ permissions:
 
 env:
   RELEASE: "23.1.2.6"
-  TOOLCHAIN_RUN: ""
+  TOOLCHAIN_RUN: "37434367448"
 
 jobs:
   trace:
     strategy:
       fail-fast: false
       matrix:
-        host: [x86_64-w64-mingw32, aarch64-w64-mingw32, x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-apple-darwin]
+        host: [x86_64-w64-mingw32, aarch64-w64-mingw32]
     runs-on: ${{ fromJSON('{"x86_64-unknown-linux-gnu":"ubuntu-24.04","aarch64-unknown-linux-gnu":"ubuntu-24.04-arm","x86_64-w64-mingw32":"windows-2025","aarch64-w64-mingw32":"windows-11-arm","aarch64-apple-darwin":"macos-15"}')[matrix.host] }}
     defaults:
       run:
