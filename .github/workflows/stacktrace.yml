@@ -64,6 +64,7 @@ jobs:
           for a in dist/xclang-*.tar.xz dist/libclang-*-${{ matrix.host }}.tar.xz; do tar -C unpacked -xf "$a"; done
       - name: Crash traces
         run: |
+          set +e
           cd unpacked
           printf 'int main() {}\n#pragma clang __debug crash\n' > crash.c
           exe=; [[ $RUNNER_OS == Windows ]] && exe=.exe
