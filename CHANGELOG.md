@@ -65,6 +65,11 @@ the [patches](docs/en/reference/patches.md) of its tag.
   ([CMake](docs/en/integrations/cmake.md#build-for-macos-from-linux-or-windows)).
 - `xclang sdk fetch macos` takes the preset's SDK, the macOS 27 one too,
   where it passed over SDKs from 27 on.
+- Patches: **0010** added, crash stack traces on arm64 Windows go past
+  the frames of system DLLs, which sign their return addresses: a crash in
+  a `qsort` comparator shows the code that sorted, `sys::PrintStackTrace`
+  in a signal handler reaches the crash, and a trace ends at
+  `ntdll!RtlUserThreadStart`, in clang, lld and tools on libclang.
 
 ## [23.1.2.6](https://github.com/clice-io/xclang/releases/tag/23.1.2.6) — 2026-10-05
 
