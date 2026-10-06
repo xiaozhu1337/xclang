@@ -1,0 +1,38 @@
+diff --git a/llvm/lib/Support/Windows/Signals.inc b/llvm/lib/Support/Windows/Signals.inc
+index ec55af0..e413549 100644
+--- a/llvm/lib/Support/Windows/Signals.inc
++++ b/llvm/lib/Support/Windows/Signals.inc
+@@ -496,21 +496,21 @@ static void LocalPrintStackTrace(raw_ostream &OS, PCONTEXT C) {
+     C = &Context;
+   }
+ #if defined(_M_X64)
+-  StackFrame.AddrPC.Offset = Context.Rip;
+-  StackFrame.AddrStack.Offset = Context.Rsp;
+-  StackFrame.AddrFrame.Offset = Context.Rbp;
++  StackFrame.AddrPC.Offset = C->Rip;
++  StackFrame.AddrStack.Offset = C->Rsp;
++  StackFrame.AddrFrame.Offset = C->Rbp;
+ #elif defined(_M_IX86)
+-  StackFrame.AddrPC.Offset = Context.Eip;
+-  StackFrame.AddrStack.Offset = Context.Esp;
+-  StackFrame.AddrFrame.Offset = Context.Ebp;
++  StackFrame.AddrPC.Offset = C->Eip;
++  StackFrame.AddrStack.Offset = C->Esp;
++  StackFrame.AddrFrame.Offset = C->Ebp;
+ #elif defined(_M_ARM64)
+-  StackFrame.AddrPC.Offset = Context.Pc;
+-  StackFrame.AddrStack.Offset = Context.Sp;
+-  StackFrame.AddrFrame.Offset = Context.Fp;
++  StackFrame.AddrPC.Offset = C->Pc;
++  StackFrame.AddrStack.Offset = C->Sp;
++  StackFrame.AddrFrame.Offset = C->Fp;
+ #elif defined(_M_ARM)
+-  StackFrame.AddrPC.Offset = Context.Pc;
+-  StackFrame.AddrStack.Offset = Context.Sp;
+-  StackFrame.AddrFrame.Offset = Context.R11;
++  StackFrame.AddrPC.Offset = C->Pc;
++  StackFrame.AddrStack.Offset = C->Sp;
++  StackFrame.AddrFrame.Offset = C->R11;
+ #endif
+   StackFrame.AddrPC.Mode = AddrModeFlat;
+   StackFrame.AddrStack.Mode = AddrModeFlat;

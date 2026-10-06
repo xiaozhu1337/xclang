@@ -1,0 +1,124 @@
+name: stacktrace
+
+# exp/win-stacktrace only (patches/0010): what crash stack traces print, and
+# the smoke and libclang tests, with a release's archives or, with
+# TOOLCHAIN_RUN, a main.yml run's dist-<host> artifacts; and the patched
+# Signals.cpp compiled by MSVC.
+
+on:
+  push:
+    branches: [exp/win-stacktrace]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RELEASE: "23.1.2.6"
+  TOOLCHAIN_RUN: ""
+
+jobs:
+  trace:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [x86_64-w64-mingw32, aarch64-w64-mingw32, x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-apple-darwin]
+    runs-on: ${{ fromJSON('{"x86_64-unknown-linux-gnu":"ubuntu-24.04","aarch64-unknown-linux-gnu":"ubuntu-24.04-arm","x86_64-w64-mingw32":"windows-2025","aarch64-w64-mingw32":"windows-11-arm","aarch64-apple-darwin":"macos-15"}')[matrix.host] }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Release archives
+        if: env.TOOLCHAIN_RUN == ''
+        run: |
+          mkdir dist
+          for a in xclang libclang; do
+            curl -sSfL -A "xclang/$RELEASE" -o "dist/$a-$RELEASE-${{ matrix.host }}.tar.xz" \
+              "https://github.com/clice-io/xclang/releases/download/$RELEASE/$a-$RELEASE-${{ matrix.host }}.tar.xz"
+          done
+      - uses: actions/download-artifact@v8
+        if: env.TOOLCHAIN_RUN != ''
+        with:
+          name: dist-${{ matrix.host }}
+          path: dist
+          run-id: ${{ env.TOOLCHAIN_RUN }}
+          github-token: ${{ github.token }}
+      - name: Unpack (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory unpacked | Out-Null
+          foreach ($a in Get-Item dist/xclang-*.tar.xz, dist/libclang-*-${{ matrix.host }}.tar.xz) {
+            C:\Windows\System32\tar.exe -xf $a.FullName -C unpacked
+          }
+      - name: Unpack
+        if: runner.os != 'Windows'
+        run: |
+          mkdir unpacked
+          for a in dist/xclang-*.tar.xz dist/libclang-*-${{ matrix.host }}.tar.xz; do tar -C unpacked -xf "$a"; done
+      - name: Crash traces
+        run: |
+          cd unpacked
+          printf 'int main() {}\n#pragma clang __debug crash\n' > crash.c
+          exe=; [[ $RUNNER_OS == Windows ]] && exe=.exe
+          show() { echo "::group::$1"; shift; "$@" 2>&1; echo "exit $?"; echo "::endgroup::"; }
+          show "clang, in-process cc1" ./xclang/bin/clang$exe -fno-crash-diagnostics -c crash.c
+          show "clang, cc1 in its own process" ./xclang/bin/clang$exe -fno-integrated-cc1 -fno-crash-diagnostics -c crash.c
+          show "lld" env FORCE_LLD_DIAGNOSTICS_CRASH=1 ./xclang/bin/ld.lld$exe --version
+          show "clang, no llvm-symbolizer" env LLVM_DISABLE_SYMBOLIZATION=1 ./xclang/bin/clang$exe -fno-crash-diagnostics -c crash.c
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install cmake ninja
+      - name: libclang
+        if: ${{ !cancelled() }}
+        run: node tests/libclang.ts --tree unpacked/xclang --libclang unpacked/libclang
+      - name: Smoke test
+        if: ${{ !cancelled() }}
+        run: node tests/smoke.ts --tree unpacked/xclang
+
+  # The patched Signals.cpp compiled by MSVC (upstream builds LLVM with it),
+  # and dbghelp's walk from a zeroed STACKFRAME64 (tests/stacktrace-exp).
+  msvc:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, arch: x64, host: x86_64-w64-mingw32 }
+          - { runner: windows-11-arm, arch: arm64, host: aarch64-w64-mingw32 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Sources
+        run: |
+          curl -sSfL -A "xclang/$RELEASE" -o libclang.tar.xz \
+            "https://github.com/clice-io/xclang/releases/download/$RELEASE/libclang-$RELEASE-${{ matrix.host }}.tar.xz"
+          curl -sSfL -A "xclang/$RELEASE" -o llvm.tar.xz \
+            https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.2/llvm-project-23.1.2.src.tar.xz
+          tar -xf libclang.tar.xz
+          tar -xf llvm.tar.xz llvm-project-23.1.2.src/llvm/lib/Support llvm-project-23.1.2.src/llvm/include
+          mv llvm-project-23.1.2.src src
+          patch -p1 -F0 --forward -d src -i "$PWD/patches/0010-windows-stack-trace/0010.patch"
+      - name: Compile
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $bat = "@call `"$vs\VC\Auxiliary\Build\vcvarsall.bat`" ${{ matrix.arch }} >nul`r`n" +
+            "cl /nologo /c /std:c++17 /EHsc /W4 /wd4100 /wd4146 /wd4244 /wd4267 /wd4324 /wd4458 /wd4459 /wd4702 /DNDEBUG /O2 /Ilibclang\include /Isrc\llvm\lib\Support src\llvm\lib\Support\Signals.cpp /Fo:Signals.obj || exit /b 1`r`n" +
+            "cl /nologo /O1 /Zi tests\stacktrace-exp\seed.c dbghelp.lib /Fe:seed.exe /link /DEBUG || exit /b 1`r`n"
+          Set-Content -Path build.bat -Value $bat -NoNewline
+          cmd /c build.bat
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\seed.exe
+          exit 0
