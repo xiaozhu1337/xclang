@@ -65,6 +65,14 @@ the [patches](docs/en/reference/patches.md) of its tag.
   ([CMake](docs/en/integrations/cmake.md#build-for-macos-from-linux-or-windows)).
 - `xclang sdk fetch macos` takes the preset's SDK, the macOS 27 one too,
   where it passed over SDKs from 27 on.
+- macOS: a crash trace of the toolchain's clang or lld no longer names its
+  frames after unrelated functions. `llvm` kept 632 weak definitions,
+  which a macOS program exports and strip leaves, and `llvm-symbolizer`
+  and `dladdr` named each frame after the nearest of them; now it exports
+  nothing and keeps no symbols, and its frames are addresses, as on Linux
+  and Windows. LLVM's `__crashreporter_info__` is gone with them: macOS
+  crash reports of clang and lld no longer carry its "Application Specific
+  Information".
 
 ## [23.1.2.6](https://github.com/clice-io/xclang/releases/tag/23.1.2.6) — 2026-10-05
 
